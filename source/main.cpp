@@ -10,6 +10,7 @@
 std::size_t NUMBER_THREADS = 8;
 
 const std::size_t NUMBER_OPERATIONS = 100000;
+const std::size_t k_value_blink = 3;
 
 int MIN_VALUE = 1;
 int MAX_VALUE = 15000;
@@ -18,7 +19,7 @@ std::random_device rd;
 
 class TreeSearcher {
  public:
-  TreeSearcher(unsigned int id, EDA::Concurrent::BLinkTree<3, int> *b_link)
+  TreeSearcher(unsigned int id, EDA::Concurrent::BLinkTree<k_value_blink, int> *b_link)
       : id_(id), b_link_(b_link) {}
 
   void operator()() {
@@ -31,10 +32,10 @@ class TreeSearcher {
 
  private:
   unsigned int id_;
-  EDA::Concurrent::BLinkTree<3, int> *b_link_;
+  EDA::Concurrent::BLinkTree<k_value_blink, int> *b_link_;
 };
 
-void sequential_insert(EDA::Concurrent::BLinkTree<3, int> *b_link) {
+void sequential_insert(EDA::Concurrent::BLinkTree<k_value_blink, int> *b_link) {
   std::uniform_int_distribution<int> distribution(MIN_VALUE, MAX_VALUE);
   for (std::size_t i = 0; i < NUMBER_OPERATIONS; ++i) {
     std::cout << distribution(rd) << "\n";
@@ -43,8 +44,8 @@ void sequential_insert(EDA::Concurrent::BLinkTree<3, int> *b_link) {
 }
 
 void run_test() {
-  EDA::Concurrent::BLinkTree<3, int> b_link;
-
+  EDA::Concurrent::BLinkTree<k_value_blink, int> b_link;
+  
   sequential_insert(&b_link);
 
   std::thread *threads = new std::thread[NUMBER_THREADS];
