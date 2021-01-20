@@ -6,125 +6,154 @@
 #include <assert.h>
 #include <memory>
 #include <stack>
+#include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace EDA {
-namespace Concurrent {
+  namespace Concurrent {
 
-template <std::size_t k, typename Type>
-class BLinkTree {
-private:
-  typedef Type data_type;
+    //Using Visual Studio _DEBUG macro
+    #ifdef _DEBUG
+      #define Validate_expression(expression, message) assert(expression)
+    #else
+      #define Validate_expression(expression, message)\
+              try { if (!expression) throw std::runtime_error(message); }\
+              catch (const std::exception& error_) { std::cerr << "ERROR: " << error_.what() << '\n'; exit(1); }
+    #endif
 
-  struct BLinkNode;
-  struct NodeField {
-    NodeField() {}
+    template <std::size_t k, typename Type>
+    class BLinkTree {
+    private:
+      typedef Type data_type;
 
-    bool on_leaf() const { return !(next_level.get()); }
+      struct BLinkNode;
+      struct NodeField {
+        NodeField(data_type key, std::shared_ptr<BLinkNode> left) : key_value(key), next_level_(left) {}
 
-    data_type get_key() const { return key_value; }
+        std::shared_ptr<BLinkNode> next_level_;
+        data_type key_value;
+      };
 
-    std::shared_ptr<BLinkNode> get_ptr2nxtlvl() const { return next_level; }
+      struct BLinkNode {
+      private:
+        std::shared_ptr<BLinkNode> split() {
+          return nullptr;
+        }
 
-  private:
-    std::shared_ptr<BLinkNode> next_level;
-    data_type key_value;
-  };
+      public:
+        BLinkNode(std::size_t level = 0) : level_(level), size_(0) {}
 
-  struct BLinkNode {
-    BLinkNode() {}
+        NodeField operator[](const std::size_t& position) {
+          Validate_expression(position < 2 * k, "The given position is out of range of the node.");
+          return NodeField(KEYS[position], SONS[position]);
+        }
 
-    NodeField operator[](const std::size_t& position) {
-      assert(position < 2 * k + 1);
-      return entries[position];
-    }
+        bool is_leaf() { return (level_ == 0); }
 
-    bool is_leaf() {
-      return (*this)[0].on_leaf();
-    }
+        bool is_linkptr(std::shared_ptr<BLinkNode>& ptr_) const { return (link_pointer.get() == ptr_.get()); }
 
-    bool is_linkptr(std::shared_ptr<BLinkNode>& ptr_) const { return (link_pointer.get() == ptr_.get()); }
+        bool key_is_stored(const data_type& key_value) {
+          for (std::size_t i(0); i < size(); ++i)
+            if (KEYS[i] == key_value)
+              return true;//success
+          return false;//failure
+        }
 
-    bool key_is_stored(const data_type& key_value) {
-      for (NodeField& entry_ : entries)
-        if (entry_.get_key() == key_value)
-          return true;//success
-      return false;//failure
-    }
+        std::size_t size() { return size_; }
 
-    std::size_t size() { return size_; }
+        void insert(const NodeField& entry) {
+          if (size() == 2 * k)
+            std::shared_ptr<BLinkNode> newnode = split();
+          else {
+            KEYS[size_] = entry.key_value;
+            SONS[size_++] = entry.next_level_;
+          }
+        }
 
-    void insert(const NodeField& entry) {
-      if (size() == 2 * k + 1)
-        std::shared_ptr<BLinkNode> newnode = split();
-      else
-        entries[size_++] = entry;
-    }
+        void link_with(const std::shared_ptr<BLinkNode>& next) {
+          link_pointer = next;
+        }
 
-    std::shared_ptr<BLinkNode>& scannode(const data_type& key_value) const {
-      for (NodeField& entry_ : entries)
-        if (entry_.get_key() >= key_value)
-          return entry_.get_ptr2nxtlvl();
-      return link_pointer;
-    }
+        std::shared_ptr<BLinkNode>& scannode(const data_type& key_value) const {
+          for (std::size_t i(0); i < size(); ++i) {
+            NodeField& entry_ = (*this)[i];
+            if (entry_.key_value >= key_value)
+              return entry_.next_level_;
+          }
+          if (level_ != 0) {
+            NodeField hk_field(high_key, size());
+            if (high_key >= key_value)
+              return hk_field.next_level_;
+          }
+          return link_pointer;
+        }
 
-    std::shared_ptr<BLinkNode> split() {
-      return nullptr;
-    }
+      private:
+        std::shared_ptr<BLinkNode> link_pointer;
+        std::shared_ptr<data_type> high_key;
+        std::array<data_type, 2 * k> KEYS;
+        std::array<std::shared_ptr<BLinkNode>, 2 * k + 1> SONS;
+        std::size_t size_;
+        std::size_t level_;
+      };
 
-  private:
-    std::shared_ptr<BLinkNode> link_pointer;
-    std::array<NodeField, 2 * k + 1> entries;
-    std::size_t size_;
-  };
+      void move_right() {}
 
-public:
+    public:
 
-  explicit BLinkTree() {
-    assert(k != 0);
-    root = std::make_shared<BLinkNode>();
-    size_of_tree = 0;
-  }
+      explicit BLinkTree() {
+        Validate_expression(k != 0, "The value of k should not be zero.");
+        root = std::make_shared<BLinkNode>();
+        size_of_tree = 0;
+      }
 
-  virtual ~BLinkTree() {
-    root.reset();
-  }
+      virtual ~BLinkTree() {
+        root.reset();
+      }
 
-  std::size_t size() const { return size_of_tree; }
+      std::size_t size() const { return size_of_tree; }
 
-  bool empty() const {
-    return (root->size() == 0);
-  }
+      bool empty() const {
+        return (root->size() == 0);
+      }
 
-  bool search(const data_type& value) const {
-    std::shared_ptr<BLinkNode> current = root;
-    while (current.get()) {
-      if (current->is_leaf()) break;
-      current = current->scannode(value);
-    }
-    std::shared_ptr<BLinkNode> temp_current = current;
-    while (true) {
-      temp_current = temp_current.scannode(value);
-      if (!(current->is_linkptr(temp_current))) break;
-      current = temp_current;
-    }
-    return current->key_is_stored(value);
-  }
+      bool search(const data_type& value) const {
+        std::shared_ptr<BLinkNode> current = root;
+        while (current.get()) {
+          if (current->is_leaf()) break;
+          current = current->scannode(value);
+        }
+        std::shared_ptr<BLinkNode> temp_current = current;
+        while (true) {
+          temp_current = temp_current->scannode(value);
+          if (!(current->is_linkptr(temp_current))) break;
+          current = temp_current;
+        }
+        return current->key_is_stored(value);
+      }
 
-  void insert(const data_type& value) {
-    std::stack<std::shared_ptr<BLinkNode>> ancestors;
-    std::shared_ptr<BLinkNode> current = root;
-    /*...*/
-  }
+      void insert(const data_type& value) {
+        std::stack<std::shared_ptr<BLinkNode>> ancestors;
+        std::shared_ptr<BLinkNode> current = root;
+        std::shared_ptr<BLinkNode> temp_current;
+        while (!current->is_leaf()) {
+          temp_current = current;
+          current = current->scannode(value);
+          if (!temp_current->is_linkptr(current))
+            ancestors.push(temp_current);
+        }
+        /*...*/
+      }
 
-  void remove(const data_type& value) {}
+      void remove(const data_type& value) {}
 
-private:
-  std::shared_ptr<BLinkNode> root;
-  std::size_t size_of_tree;
-};
+    private:
+      std::shared_ptr<BLinkNode> root;
+      std::size_t size_of_tree;
+    };
 
-}  // namespace Concurrent
+  }  // namespace Concurrent
 }  // namespace EDA
 
 #endif  // SOURCE_B_LINK_HPP_
