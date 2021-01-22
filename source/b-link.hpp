@@ -12,90 +12,84 @@
 
 namespace EDA {
   namespace Concurrent {
-
     //Using Visual Studio _DEBUG macro
     #ifdef _DEBUG
       #define Validate_expression(expression, message) assert(expression)
     #else
-      #define Validate_expression(expression, message)\
-              try { if (!expression) throw std::runtime_error(message); }\
-              catch (const std::exception& error_) { std::cerr << "ERROR: " << error_.what() << '\n'; exit(1); }
+      #define Validate_expression(expression, message)                      \
+              try { if (!expression) throw std::runtime_error(message); }   \
+              catch (const std::exception& error_) {                        \
+                std::cerr << "ERROR: " << error_.what() << '\n';            \
+                exit(EXIT_FAILURE);                                         \
+              }
     #endif
 
-    template <std::size_t k, typename Type>
+    template <std::size_t k, typename data_type, typename key_type>
     class BLinkTree {
-    private:
-      typedef Type data_type;
-
+      //BLink Components : NodeField, BLinkNode
       struct BLinkNode;
+
       struct NodeField {
-        NodeField(data_type key, std::shared_ptr<BLinkNode> left) : key_value(key), next_level_(left) {}
+        NodeField() {}
 
+        NodeField(const key_type& key_value,
+          std::shared_ptr<BLinkNode>& next_level,
+          std::unique_ptr<NodeField>& next_field
+        ) : key_value_(key_value),
+            next_level_(next_level),
+            next_field_(std::move(next_field)) {}
+
+        NodeField(const key_type& key_value,
+          std::unique_ptr<data_type>& data_value,
+          std::unique_ptr<NodeField>& next_field
+        ) : key_value_(key_value),
+            next_field_(next_field),
+            data_value_(std::move(data_value)) {}
+
+        key_type key_value_;
         std::shared_ptr<BLinkNode> next_level_;
-        data_type key_value;
+        std::unique_ptr<data_type> data_value_;
+        std::unique_ptr<NodeField> next_field_;
       };
-
+      //TODO: Refactory BLinkNode
       struct BLinkNode {
-      private:
-        std::shared_ptr<BLinkNode> split() {
-          return nullptr;
-        }
-
-      public:
         BLinkNode(std::size_t level = 0) : level_(level), size_(0) {}
-
-        NodeField operator[](const std::size_t& position) {
-          Validate_expression(position < 2 * k, "The given position is out of range of the node.");
-          return NodeField(KEYS[position], SONS[position]);
-        }
-
+        
         bool is_leaf() { return (level_ == 0); }
 
-        bool is_linkptr(std::shared_ptr<BLinkNode>& ptr_) const { return (link_pointer.get() == ptr_.get()); }
+        bool is_linkptr(const std::shared_ptr<BLinkNode>& ptr_) const { return (link_pointer.get() == ptr_.get()); }
 
-        bool key_is_stored(const data_type& key_value) {
-          for (std::size_t i(0); i < size(); ++i)
-            if (KEYS[i] == key_value)
-              return true;//success
+        bool key_is_stored(const key_type& key_value) {
+          
           return false;//failure
         }
 
-        std::size_t size() { return size_; }
+        std::size_t size() const noexcept { return size_; }
 
         void insert(const NodeField& entry) {
-          if (size() == 2 * k)
-            std::shared_ptr<BLinkNode> newnode = split();
-          else {
-            KEYS[size_] = entry.key_value;
-            SONS[size_++] = entry.next_level_;
-          }
+          
         }
 
-        void link_with(const std::shared_ptr<BLinkNode>& next) {
-          link_pointer = next;
+        void link_with(const std::shared_ptr<BLinkNode>& node_ptr) {
+          link_pointer = node_ptr;
         }
 
-        std::shared_ptr<BLinkNode>& scannode(const data_type& key_value) const {
-          for (std::size_t i(0); i < size(); ++i) {
-            NodeField& entry_ = (*this)[i];
-            if (entry_.key_value >= key_value)
-              return entry_.next_level_;
-          }
-          if (level_ != 0) {
-            NodeField hk_field(high_key, size());
-            if (high_key >= key_value)
-              return hk_field.next_level_;
-          }
+        std::shared_ptr<BLinkNode>& scannode(const key_type& key_value) const {
+          
           return link_pointer;
         }
 
       private:
+        key_type high_key;
         std::shared_ptr<BLinkNode> link_pointer;
-        std::shared_ptr<data_type> high_key;
-        std::array<data_type, 2 * k> KEYS;
-        std::array<std::shared_ptr<BLinkNode>, 2 * k + 1> SONS;
+        std::unique_ptr<NodeField> head;
         std::size_t size_;
         std::size_t level_;
+        bool is_locked;
+
+        std::shared_ptr<BLinkNode> split() {
+          return nullptr;
+        }
       };
 
       void move_right() {}
