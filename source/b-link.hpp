@@ -4,7 +4,9 @@
 
 #include <array>
 #include <assert.h>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <stack>
 #include <stdexcept>
 #include <string>
@@ -73,7 +75,18 @@ namespace EDA {
       struct BLinkNode {
         typedef std::reference_wrapper<std::shared_ptr<NodeField>> PtrFieldRef;
 
+        std::mutex blink_locker;
+        std::condition_variable working_on;
+
         BLinkNode(std::size_t level = 0) : level_(level), size_(0) {}
+
+        void lock() {
+          doing_modification = true;
+        }
+
+        void unlock() {
+          doing_modification = false;
+        }
         
         bool is_leaf() { return (level_ == 0); }
 
@@ -82,6 +95,8 @@ namespace EDA {
         }
 
         bool has(const key_type key_value) {
+          std::unique_lock<std::mutex> process_locker(blink_locker);
+          while (doing_modification) { working_on.wait(process_locker); }
           std::shared_ptr<NodeField> cfield = find_place(key_value).get();
           if(cfield != nullptr)
             if (cfield->get_key() == key_value)
@@ -90,6 +105,8 @@ namespace EDA {
         }
 
         const std::unique_ptr<data_type>& find(const key_type key_value) {
+          std::unique_lock<std::mutex> process_locker(blink_locker);
+          while (doing_modification) { working_on.wait(process_locker); }
           std::shared_ptr<NodeField> cfield = find_place(key_value).get();
           if (cfield != nullptr) {
             if (cfield->get_key() == key_value)
@@ -106,6 +123,8 @@ namespace EDA {
 
         bool insert(const key_type key_value, 
                     const data_type& data_value) {
+          std::unique_lock<std::mutex> process_locker(blink_locker);
+          while (doing_modification) { working_on.wait(process_locker); }
           PtrFieldRef cfield_refw = find_place(key_value);
           std::unique_ptr<data_type> data_ptr(new data_type(data_value));
           cfield_refw.get() = std::make_shared<NodeField>(key_value, data_ptr,
@@ -115,6 +134,8 @@ namespace EDA {
 
         bool insert(const key_type key_value, 
                     const std::shared_ptr<BLinkNode>& next_level) {
+          std::unique_lock<std::mutex> process_locker(blink_locker);
+          while (doing_modification) { working_on.wait(process_locker); }
           PtrFieldRef cfield_refw = find_place(key_value);
           cfield_refw.get() = std::make_shared<NodeField>(key_value, next_level,
                                           cfield_refw->get()->get_next_field());
@@ -126,6 +147,8 @@ namespace EDA {
         }
 
         std::shared_ptr<BLinkNode> scannode(const key_type key_value) {
+          std::unique_lock<std::mutex> process_locker(blink_locker);
+          while (doing_modification) { working_on.wait(process_locker); }
           std::shared_ptr<NodeField> cfield = find_place(key_value).get();
           return (cfield != nullptr) ? cfield->get_next_level() : link_pointer;
         }
@@ -136,7 +159,8 @@ namespace EDA {
         std::shared_ptr<NodeField> head;
         std::size_t size_;
         std::size_t level_;
-        bool is_locked;
+
+        bool doing_modification;
 
         PtrFieldRef find_place(const key_type& key_value) {
           PtrFieldRef current_field_ref = std::ref(head);
@@ -152,8 +176,6 @@ namespace EDA {
           return nullptr;
         }
       };
-
-      void move_right() {}
 
     public:
       //TODO: Complete insertion and find a way to lock nodes
@@ -195,9 +217,42 @@ namespace EDA {
         while (!current->is_leaf()) {
           temp_current = current;
           current = current->scannode(value);
-          if (!temp_current->is_link_of(current))
+          if (!current->is_link_of(temp_current))
             ancestors.push(temp_current);
+        }//search process
+        current->lock();
+        std::unique_lock<std::mutex> process_locker(current->blink_locker);
+        move_right(key_value, current);
+        if (current->has(key_value)) {
+          std::cerr << "[!]: La clave del dato a insertar ya existe en el arbol.\n";
+          current->unlock();
+          return;
         }
+        /*
+        if A is safe then
+          begin
+          A + node.insert(A, w, v); / *Exact manner depends if current is a leaf * /
+          put(A, current);
+        uuIock(current); / *Success - done backtracking “ /
+          end else begin
+          u + aUocate(1 new page for B);
+        A, B + rearrange old A, adding v and w, to make 2 nodes,
+          where(link ptr of A, link ptr of B) c(u, link ptr of old A);
+        y + max value stored in new A; / *For insertion into parent * /
+          put@, 4; / *Insert B before A * /
+          put(A, current); / *Instantaneous change of 2 nodes * /
+          oldnode c current;
+        v + -Y;
+        w cu;
+        current c pop(stack);
+        lock(current);
+        A t get(current);
+        movezight;
+        unlock(oldnode);
+        goto Doinsertion / *And repeat procedure for parent * /
+          end        */
+        current->unlock();
+        current->working_on.notify_one();
         /*...*/
       }
 
@@ -216,6 +271,16 @@ namespace EDA {
                                                   tcnode->is_link_of(cnode);
                                                             cnode = tcnode) {}
         return cnode;
+      }
+
+      void move_right(const key_type key_value, std::shared_ptr<BLinkNode>& current) {
+        for (std::shared_ptr<BLinkNode> t = current->scannode(key_value);
+                                                  t->is_link_of(current);
+                                                            current = t) {
+          t->lock();
+          current->unlock();
+          current = t;
+        }
       }
     };
 
