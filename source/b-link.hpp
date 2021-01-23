@@ -128,7 +128,7 @@ namespace EDA {
           PtrFieldRef cfield_refw = find_place(key_value);
           std::unique_ptr<data_type> data_ptr(new data_type(data_value));
           cfield_refw.get() = std::make_shared<NodeField>(key_value, data_ptr,
-                                         cfield_refw->get()->get_next_field());
+                                         cfield_refw->get());
           return (++size_ == MAX_FIELDS_X_NODE);
         }
 
@@ -138,7 +138,7 @@ namespace EDA {
           while (doing_modification) { working_on.wait(process_locker); }
           PtrFieldRef cfield_refw = find_place(key_value);
           cfield_refw.get() = std::make_shared<NodeField>(key_value, next_level,
-                                          cfield_refw->get()->get_next_field());
+                                          cfield_refw->get());
           return (++size_ == MAX_FIELDS_X_NODE);
         }
 
@@ -178,7 +178,7 @@ namespace EDA {
       };
 
     public:
-      //TODO: Complete insertion and find a way to lock nodes
+      //TODO: Complete insertion and split
       explicit BLinkTree() {
         Validate_expression(k != 0, "The value of k should not be zero.");
         root = std::make_shared<BLinkNode>();
@@ -228,30 +228,27 @@ namespace EDA {
           current->unlock();
           return;
         }
-        /*
-        if A is safe then
-          begin
-          A + node.insert(A, w, v); / *Exact manner depends if current is a leaf * /
-          put(A, current);
-        uuIock(current); / *Success - done backtracking “ /
-          end else begin
-          u + aUocate(1 new page for B);
-        A, B + rearrange old A, adding v and w, to make 2 nodes,
-          where(link ptr of A, link ptr of B) c(u, link ptr of old A);
-        y + max value stored in new A; / *For insertion into parent * /
-          put@, 4; / *Insert B before A * /
-          put(A, current); / *Instantaneous change of 2 nodes * /
-          oldnode c current;
-        v + -Y;
-        w cu;
-        current c pop(stack);
-        lock(current);
-        A t get(current);
-        movezight;
-        unlock(oldnode);
-        goto Doinsertion / *And repeat procedure for parent * /
-          end        */
-        current->unlock();
+        std::shared_ptr<BLinkNode> oldnode = current;
+        //safe node
+        while (!ancestors.empty()) {
+          if (current->size() < MAX_FIELDS_X_NODE) {
+            if(current->is_leaf())
+              current->insert(key_value, data_value);
+            else
+              current->insert(key_value, );
+            current->unlock();
+          }
+          else {
+            std::shared_ptr<BLinkNode> newnode = current->split();
+            oldnode = current;
+            current = ancestors.top();
+            current->insert(key_value, newnode);
+            ancestors.pop();
+            current->lock();
+            move_right(key_value, current);
+            oldnode->unlock();
+          }
+        }
         current->working_on.notify_one();
         /*...*/
       }
