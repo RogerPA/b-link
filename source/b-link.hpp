@@ -19,7 +19,7 @@ namespace EDA {
       #define Validate_expression(expression, message)                                             \
               try { if (!expression) throw std::runtime_error(message); }                          \
               catch (const std::exception& error_) {                                               \
-                std::cerr << "[ERROR]: " << error_.what() << '\n';                                   \
+                std::cerr << "[ERROR]: " << error_.what() << '\n';                                 \
                 exit(EXIT_FAILURE);                                                                \
               }
     #endif
@@ -201,7 +201,7 @@ namespace EDA {
         /*...*/
       }
 
-      void remove(const data_type& value) {}
+      void remove(const key_type key_value) {}
 
     private:
       std::shared_ptr<BLinkNode> root;
