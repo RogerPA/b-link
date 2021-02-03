@@ -194,6 +194,7 @@ namespace EDA {
         void push_back(const std::shared_ptr<NodeField>& next_field) {
           last_fpb.get() = next_field;
           last_fpb = std::ref(last_fpb.get()->get_next_field());
+          high_key = next_field->get_key();
           ++size_;
         }
 
