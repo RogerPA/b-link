@@ -204,8 +204,9 @@ namespace EDA {
 
         std::shared_ptr<BLinkNode> split() {
           std::shared_ptr<BLinkNode> other_half(get_level());
+          other_half->link_with(link_pointer);
           std::size_t half_size = size_ / 2;
-          size_ = size_ - size_ / 2;
+          size_ -= half_size;
           std::queue<std::shared_ptr<NodeField>> fn_fields;
           std::shared_ptr<NodeField> cfield = head;
           while (half_size--) {
@@ -219,12 +220,13 @@ namespace EDA {
             fn_fields.pop();
           }
           other_half.swap(*this);
+          link_with(other_half);
           return other_half;
         }
       };
 
     public:
-      //TODO: Complete insertion and split
+      //TODO: Nothing maybe
       explicit BLinkTree() {
         Validate_expression(k != 0, "The value of k should not be zero.");
         root = std::make_shared<BLinkNode>();
@@ -332,6 +334,7 @@ namespace EDA {
                                                             current = t) {
           t->lock();
           current->unlock();
+          current->working_on.notify_one();
           current = t;
         }
       }
